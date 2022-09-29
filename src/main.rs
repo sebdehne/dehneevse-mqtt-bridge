@@ -48,10 +48,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build()
         .unwrap();
 
-    let id = "10BA23AB50534D53302E3120FF162332_".to_string();
-    let b = settings.get_string(&format!("evse_name.id_{}", id)).unwrap_or(id);
-    println!("NIce: {}", b);
-
     // Communication channels between threads:
     // EVSE connections -> MQTT
     let (evse_mqtt_tx, evse_mqtt_rx) = broadcast::channel(32);
