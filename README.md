@@ -2,7 +2,7 @@
 Provides MQTT communication for the Dehne-EVSE ([Hardware](https://github.com/sebdehne/DehneEVSE-Hardware)/[Firmware](https://github.com/sebdehne/DehneEVSE-Firmware)) by translating and bridging the binary protocol 
 to JSON messages sent over MQTT. 
 
-It listens on a TCP-port which the EVSE connects to and connects to a MQTT-broker of your choice.
+It listens on a configurable TCP-port, which multiple Dehne-EVSE charging stations can connect to, and connects to a MQTT-broker of your choice. 
 
 Subscribe (listening for MQTT message) and publish (forwarding messages from the EVSE to MQTT) is done on seperate MQTT-topics, 
 to avoid loops. See configuration options.
