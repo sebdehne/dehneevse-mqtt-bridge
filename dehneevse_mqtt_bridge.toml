@@ -1,0 +1,15 @@
+
+[ evse ]
+bind_address = "[::]"
+bind_port = 9091
+
+[ mqtt ]
+broker = "tcp://localhost:1883"
+topic_subscribe = "to_dehneEVSE"
+topic_publish = "from_dehneEVSE"
+
+# Mappes the serial number of the DehneEVSE to a usable name,
+# which is used on the MQTT messages. Prefix with "id_"
+[ evse_name ]
+id_10BA23AB50534D53302E3120FF162332 = "Charger 1"
+id_795AF52150534D53302E3120FF16112E = "Charger 2"
