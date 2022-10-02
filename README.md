@@ -21,12 +21,13 @@ Then run:
         dehneevse_mqtt_bridge [OPTIONS]
 
     OPTIONS:
+        -a <EVSE_LISTEN_ADDR>                                [default: [::]]
+        -c <CONFIGURATION_FILE>                              [default: ./dehneevse_mqtt_bridge.toml]
         -h, --mqtt_host <MQTT_BROKER>                        [default: tcp://localhost:1883]
             --help                                           Print help information
-        -l <EVSE_LISTEN_PORT>                                [default: 9091]
             --mqtt_topic_publish <MQTT_TOPIC_PUBLISH>        [default: from_dehneEVSE]
             --mqtt_topic_subscribe <MQTT_TOPIC_SUBSCRIBE>    [default: to_dehneEVSE]
-
+        -p <EVSE_LISTEN_PORT>                                [default: 9091]
 
 ## Types of messages
 

@@ -1,5 +1,12 @@
+use std::{
+    error,
+    io::{Error, ErrorKind},
+};
+
 use byteorder::{BigEndian, ByteOrder};
-use serde::{__private::from_utf8_lossy, Serialize, Deserialize};
+use serde::{Deserialize, Serialize, __private::from_utf8_lossy};
+
+type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
 #[allow(unused_variables)]
 pub fn evse_to_mqtt(
@@ -7,9 +14,9 @@ pub fn evse_to_mqtt(
     message_type: u8,
     payload_length: u32,
     payload: &[u8],
-) -> MqttMessage {
+) -> Result<MqttMessage> {
     match message_type {
-        RESPONSE_TYPE_PONG => MqttMessage {
+        RESPONSE_TYPE_PONG => Ok(MqttMessage {
             message_type: MqttMessageType::response_ping,
             client_id,
             handshake: None,
@@ -17,8 +24,8 @@ pub fn evse_to_mqtt(
             pwm_percent: None,
             contactor_state: None,
             measurements: None,
-        },
-        NOTIFY => MqttMessage {
+        }),
+        NOTIFY => Ok(MqttMessage {
             message_type: MqttMessageType::notify,
             client_id,
             handshake: None,
@@ -26,8 +33,8 @@ pub fn evse_to_mqtt(
             pwm_percent: None,
             contactor_state: None,
             measurements: None,
-        },
-        RESPONSE_TYPE_SET_PWM_PERCENT => MqttMessage {
+        }),
+        RESPONSE_TYPE_SET_PWM_PERCENT => Ok(MqttMessage {
             message_type: MqttMessageType::response_set_pwm_percent,
             client_id,
             handshake: None,
@@ -35,8 +42,8 @@ pub fn evse_to_mqtt(
             pwm_percent: None,
             contactor_state: None,
             measurements: None,
-        },
-        RESPONSE_TYPE_SET_CONTACTOR_STATE => MqttMessage {
+        }),
+        RESPONSE_TYPE_SET_CONTACTOR_STATE => Ok(MqttMessage {
             message_type: MqttMessageType::response_set_contactor_state,
             client_id,
             handshake: None,
@@ -44,7 +51,7 @@ pub fn evse_to_mqtt(
             pwm_percent: None,
             contactor_state: None,
             measurements: None,
-        },
+        }),
         RESPONSE_TYPE_COLLECT_DATA => {
             let contactor_state = if payload[0] == 1 { true } else { false };
             let pwm_percent = payload[1];
@@ -58,14 +65,26 @@ pub fn evse_to_mqtt(
                     2 => PilotVoltage::volt_6,
                     3 => PilotVoltage::volt_3,
                     4 => PilotVoltage::fault,
-                    _ => panic!("Unsupported pilot_volt={}", pilot_volt),
+                    _ => {
+                        return Err(Error::new(
+                            ErrorKind::InvalidData,
+                            format!("Unsupported pilot_volt={}", pilot_volt),
+                        )
+                        .into())
+                    }
                 },
                 proximity_pilot_amps: match proximity_pilot_amps {
                     0 => ProximityPilotAmps::amp_13,
                     1 => ProximityPilotAmps::amp_20,
                     2 => ProximityPilotAmps::amp_32,
                     3 => ProximityPilotAmps::no_cable,
-                    _ => panic!("Unsupported proximity_pilot_amps={}", pilot_volt),
+                    _ => {
+                        return Err(Error::new(
+                            ErrorKind::InvalidData,
+                            format!("Unsupported proximity_pilot_amps={}", proximity_pilot_amps),
+                        )
+                        .into())
+                    }
                 },
                 phase1_millivolts: BigEndian::read_u32(&payload[4..]),
                 phase2_millivolts: BigEndian::read_u32(&payload[8..]),
@@ -80,7 +99,7 @@ pub fn evse_to_mqtt(
                 logging_buffer: from_utf8_lossy(&payload[44..]).into_owned(),
             };
 
-            MqttMessage {
+            Ok(MqttMessage {
                 message_type: MqttMessageType::request_data_collection,
                 client_id,
                 handshake: None,
@@ -88,23 +107,29 @@ pub fn evse_to_mqtt(
                 pwm_percent: Some(pwm_percent),
                 contactor_state: Some(contactor_state),
                 measurements: Some(measurements),
-            }
+            })
         }
 
-        _ => panic!("Unpported message type {}", message_type),
+        _ => Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("Unpported message type {}", message_type),
+        ).into()),
     }
 }
 
-pub fn mqtt_to_evse(msg: MqttMessage) -> Vec<u8> {
+pub fn mqtt_to_evse(msg: MqttMessage) -> Result<Vec<u8>> {
     let mut vec = Vec::new();
     match msg.message_type {
         MqttMessageType::request_ping => {
             vec.push(REQUEST_TYPE_PING);
-            byteorder::WriteBytesExt::write_u32::<BigEndian>(&mut vec, 0).unwrap();
+            byteorder::WriteBytesExt::write_u32::<BigEndian>(&mut vec, 0)?;
         }
         MqttMessageType::request_firmware => {
-            let firmware = msg.firmware.unwrap();
-            let firmware_data = base64::decode(firmware.firmware_data_base64).unwrap();
+            let firmware = msg.firmware.ok_or(Error::new(
+                ErrorKind::InvalidData,
+                "firmware cannot be null",
+            ))?;
+            let firmware_data = base64::decode(firmware.firmware_data_base64)?;
             vec.push(REQUEST_TYPE_FIRMWARE);
             byteorder::WriteBytesExt::write_u32::<BigEndian>(
                 &mut vec,
@@ -132,13 +157,16 @@ pub fn mqtt_to_evse(msg: MqttMessage) -> Vec<u8> {
             byteorder::WriteBytesExt::write_u8(&mut vec, contactor_state).unwrap();
         }
         _ => {
-            panic!(
-                "Do not know how to send message_type: {:?}",
-                msg.message_type
-            )
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "Do not know how to send message_type: {:?}",
+                    msg.message_type
+                ),
+            ).into());
         }
     };
-    vec
+    Ok(vec)
 }
 
 const RESPONSE_TYPE_PONG: u8 = 1;

@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 base64 = "0.13.0"
 byteorder = "1.4.3"
+bytes = "1.2.1"
 clap = { version = "3.2.22", features = ["derive"] }
 config = { version = "0.13.2", features = ["toml"] }
 ctrlc = "3.2.3"

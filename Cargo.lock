@@ -243,6 +243,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "byteorder",
+ "bytes",
  "clap",
  "config",
  "ctrlc",

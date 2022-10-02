@@ -1,12 +1,12 @@
 
 [ evse ]
-bind_address = "[::]"
-bind_port = 9091
+# bind_address = "[::]"
+# bind_port = 9091
 
 [ mqtt ]
-broker = "tcp://localhost:1883"
-topic_subscribe = "to_dehneEVSE"
-topic_publish = "from_dehneEVSE"
+# broker = "tcp://localhost:1883"
+# topic_subscribe = "to_dehneEVSE"
+# topic_publish = "from_dehneEVSE"
 
 # Mappes the serial number of the DehneEVSE to a usable name,
 # which is used on the MQTT messages. Prefix with "id_"

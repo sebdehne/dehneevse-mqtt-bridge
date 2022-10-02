@@ -1,12 +1,12 @@
 use std::error::Error;
-
 use clap::Parser;
 use cli::Cli;
 use config::Config;
 use env_logger::{Builder, Target};
-use log::{info, LevelFilter};
+use log::{info, error, LevelFilter};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
+use utils::{USizeCountDownLatch, CountDownLatch};
 
 use crate::evse_handler::handle_evse;
 use crate::mqtt_handler::handle_mqtt;
@@ -19,7 +19,7 @@ mod utils;
 
 /*
  * TODO:
- * - auto-reconnect mqtt
+ * - timeout handling on EVSE/TCP-side
  * - code cleanup
  * - documentation
  * - release binary / install instructions ?
@@ -45,8 +45,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .set_default("mqtt.topic_publish", args.mqtt_topic_publish)?
         .add_source(config::File::with_name(&args.configuration_file).required(false))
         .add_source(config::Environment::with_prefix("DEHNEEVSE").separator("_"))
-        .build()
-        .unwrap();
+        .build()?;
 
     // Communication channels between threads:
     // EVSE connections -> MQTT
@@ -62,6 +61,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         shutdown_tx_clone.send(true).unwrap();
     })
     .expect("Error setting Ctrl-C handler");
+
+    // setup shared counter to track number of active "threads"
+    let active_threads = USizeCountDownLatch::new();
 
     // Start by listening on the TCP port for EVSE stations to connect to
     let listener = TcpListener::bind(format!(
@@ -89,7 +91,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let shutdown_rx_clone = shutdown_tx.subscribe();
     let shutdown_tx_clone = shutdown_tx.clone();
     let settings_clone = settings.clone();
+    let active_threads_clone = active_threads.clone();
     tokio::spawn(async move {
+        active_threads_clone.count_up();
+        
         handle_mqtt(
             settings_clone.get_string("mqtt.broker").unwrap(),
             settings_clone.get_string("mqtt.topic_subscribe").unwrap(),
@@ -97,21 +102,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
             mqtt_evse_tx_clone,
             evse_mqtt_rx_clone,
             shutdown_rx_clone,
-            shutdown_tx_clone,
-        )
-        .await;
+        ).await.unwrap_or_else(|err| {
+            shutdown_tx_clone.send(true).unwrap();
+            error!("MQTT: handling failed: {}", err);
+        });
+
+        active_threads_clone.count_down();
     });
 
     let mut shutdown_rx = shutdown_tx.subscribe();
     loop {
-        let settings_clone = settings.clone();
         tokio::select! {
             accept = listener.accept() => {
                 let (socket, peer_addr) = accept.unwrap();
                 let mqtt_evse_rx_clone = mqtt_evse_rx.resubscribe();
                 let evse_mqtt_tx_clone = evse_mqtt_tx.clone();
                 let shutdown_rx_clone = shutdown_tx.subscribe();
+                let active_threads_clone = active_threads.clone();
+                let settings_clone = settings.clone();
                 tokio::spawn(async move {
+
+                    active_threads_clone.count_up();
+
                     handle_evse(
                         mqtt_evse_rx_clone,
                         evse_mqtt_tx_clone,
@@ -120,16 +132,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         shutdown_rx_clone,
                         settings_clone.clone()
                     )
-                    .await
+                    .await.unwrap_or_else(|err| {
+                        error!("EVSE: connection failed: {}", err);
+                    });
+
+                    active_threads_clone.count_down();
                 });
             }
-            receive = shutdown_rx.recv() => {
-                receive.unwrap();
-                break;
-            }
+            Ok(_) = shutdown_rx.recv() => { break }
         }
     }
-    // TODO wait here until all tasks/threads have finished
+
+    active_threads.wait_for_zero();
+
     info!("Bye");
     Ok(())
 }
