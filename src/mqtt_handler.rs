@@ -43,7 +43,7 @@ pub async fn handle_mqtt(
         let publish_to_mqtt = async { cli.publish(publish_msg.clone().unwrap()).await };
 
         tokio::select! {
-            connect = cli.connect(conn_opts.clone()), if !connected => {
+            connect = cli.connect(conn_opts.clone()), if !connected && !need_sleep => {
                 match connect {
                     Ok(_) => {
                         info!("MQTT: Connected to broker {}", broker);
@@ -82,7 +82,7 @@ pub async fn handle_mqtt(
                     },
                 }
             }
-            subscribe = cli.subscribe(&topic_subscribe, mqtt::QOS_0), if !subscribed => {
+            subscribe = cli.subscribe(&topic_subscribe, mqtt::QOS_0), if !subscribed && !need_sleep => {
                 match subscribe {
                     Ok(_) => {
                         info!("MQTT: Subscribed to {}", &topic_subscribe);
@@ -144,5 +144,6 @@ pub async fn handle_mqtt(
             else => { break }
         }
     }
+
     Ok(())
 }
